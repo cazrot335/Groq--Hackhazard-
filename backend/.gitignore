@@ -1,0 +1,15 @@
+# Environment variables
+.env
+
+# Python virtual environment
+pyvenv.cfg
+venv/
+bin/
+lib/
+include/
+
+# Python cache files
+__pycache__/
+
+# Workspace folder
+workspace/

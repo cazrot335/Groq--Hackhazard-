@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodePilot AI - Web IDE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+    <style>
+        /* General Styles */
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background-color: #1e1e1e;
+            color: white;
+        }
+
+        .header .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .header .theme-toggle {
+            cursor: pointer;
+        }
+
+        .header .profile {
+            display: flex;
+            align-items: center;
+        }
+
+        .header .profile img {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-left: 0.5rem;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar */
+        .left-sidebar {
+            width: 15rem;
+            background-color: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .left-sidebar .nav-icons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .left-sidebar .nav-icons i {
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .left-sidebar .file-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+        .left-sidebar .file-actions i {
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .file-item {
+            cursor: pointer;
+            padding: 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .file-item.active {
+            background-color: #4a6cf7;
+            color: white;
+        }
+
+        /* Center (Main Code Area) */
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .monaco-editor-container {
+            flex: 1;
+            position: relative;
+        }
+
+        .terminal-container {
+            height: 30%;
+            background-color: #1e1e1e;
+            color: white;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        /* Right Sidebar */
+        .right-sidebar {
+            width: 20rem;
+            background-color: #f8f9fa;
+            border-left: 1px solid #e9ecef;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-assistant {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-assistant textarea {
+            flex: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .chat-assistant button {
+            align-self: flex-end;
+        }
+
+        /* Bottom Panel */
+        .bottom-panel {
+            height: 20%;
+            background-color: #f1f1f1;
+            border-top: 1px solid #e0e0e0;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">CodePilot AI</div>
+        <div class="theme-toggle">🌙</div>
+        <div class="profile">
+            <span>User</span>
+            <img src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" alt="Profile">
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <div class="left-sidebar">
+            <div class="nav-icons">
+                <i class="fas fa-folder"></i>
+                <i class="fas fa-history"></i>
+                <i class="fas fa-comments"></i>
+                <i class="fas fa-book"></i>
+            </div>
+            <div class="file-actions">
+                <i class="fas fa-plus" onclick="createFile()"></i>
+                <i class="fas fa-folder-plus" onclick="createFolder()"></i>
+            </div>
+            <div id="file-list"></div>
+        </div>
+
+        <!-- Center (Main Code Area) -->
+        <div class="editor-container">
+            <div class="monaco-editor-container" id="monaco-editor-container"></div>
+            <div class="terminal-container" id="terminal-container"></div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="right-sidebar">
+            <div class="chat-assistant">
+                <textarea id="chat-input" placeholder="Ask the assistant..."></textarea>
+                <button onclick="sendChat()">Send</button>
+            </div>
+            <button onclick="uploadScreenshot()">Upload Screenshot</button>
+            <button onclick="recordVoice()">Record Voice</button>
+        </div>
+    </div>
+
+    <!-- Bottom Panel -->
+    <div class="bottom-panel">
+        <h3>Documentation</h3>
+        <div id="documentation"></div>
+    </div>
+
+    <script>
+        let editor; // Monaco Editor instance
+        let currentFile = null;
+
+        // Initialize Monaco Editor
+        require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs" } });
+        require(["vs/editor/editor.main"], function () {
+            editor = monaco.editor.create(document.getElementById("monaco-editor-container"), {
+                value: "// Select a file to start editing...",
+                language: "javascript",
+                theme: "vs-dark",
+                automaticLayout: true,
+            });
+        });
+
+        // Fetch and display files
+        async function fetchFiles() {
+            try {
+                const response = await axios.get("http://127.0.0.1:8000/files");
+                const fileList = document.getElementById("file-list");
+                fileList.innerHTML = "";
+                response.data.files.forEach((file) => {
+                    const fileItem = document.createElement("div");
+                    fileItem.className = "file-item";
+                    fileItem.textContent = file;
+                    fileItem.onclick = () => openFile(file);
+                    fileList.appendChild(fileItem);
+                });
+            } catch (error) {
+                console.error("Error fetching files:", error);
+            }
+        }
+
+        // Open a file and load its content into the editor
+        async function openFile(filename) {
+            try {
+                const response = await axios.get(`http://127.0.0.1:8000/get-file?filename=${filename}`);
+                editor.setValue(response.data.content);
+                currentFile = filename;
+
+                // Highlight the selected file
+                document.querySelectorAll(".file-item").forEach((item) => item.classList.remove("active"));
+                event.target.classList.add("active");
+
+                // Set language based on file extension
+                const extension = filename.split(".").pop();
+                const language = {
+                    py: "python",
+                    js: "javascript",
+                    html: "html",
+                    css: "css",
+                    java: "java",
+                    cpp: "cpp",
+                }[extension] || "plaintext";
+                monaco.editor.setModelLanguage(editor.getModel(), language);
+            } catch (error) {
+                console.error("Error opening file:", error);
+            }
+        }
+
+        // Create a new file
+        async function createFile() {
+            const filename = prompt("Enter the new file name:");
+            if (!filename) return;
+
+            try {
+                await axios.post("http://127.0.0.1:8000/create-file", { filename, content: "" });
+                fetchFiles(); // Refresh the file list
+            } catch (error) {
+                console.error("Error creating file:", error);
+            }
+        }
+
+        // Create a new folder
+        async function createFolder() {
+            const folderName = prompt("Enter the new folder name:");
+            if (!folderName) return;
+
+            try {
+                await axios.post("http://127.0.0.1:8000/create-folder", { folderName });
+                fetchFiles(); // Refresh the file list
+            } catch (error) {
+                console.error("Error creating folder:", error);
+            }
+        }
+
+        // Initial Fetch
+        fetchFiles();
+    </script>
+</body>
+</html>

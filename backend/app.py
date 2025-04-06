@@ -212,10 +212,7 @@ def validate_code(request: ValidateCodeRequest):
 @app.post("/code-analysis")
 def analyze_code(request: CodeAnalysisRequest):
     """
-    Analyze the provided code and return insights or suggestions.
-    If the code compiles successfully, execute it and return the output.
-    Otherwise, return the compilation/runtime errors.
-    Supports Python, JavaScript, C++, and Java.
+    Analyze the provided code and return insights or suggestions in Markdown-friendly format.
     """
     try:
         code = request.code
@@ -304,7 +301,7 @@ def analyze_code(request: CodeAnalysisRequest):
             finally:
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
-                if os.exists(executable_path):
+                if os.path.exists(executable_path):
                     os.remove(executable_path)
 
         # Java Code Compilation and Execution
@@ -349,11 +346,13 @@ def analyze_code(request: CodeAnalysisRequest):
         else:
             return {"status": "error", "message": "Unsupported file type for code analysis."}
 
-        # Return the results
+        # Format the response in Markdown
         if errors:
-            return {"status": "error", "filename": filename, "errors": errors}
+            markdown_response = f"# **Code Analysis Result**\n\n## **Errors**\n```\n{errors}\n```"
         else:
-            return {"status": "success", "filename": filename, "output": output}
+            markdown_response = f"# **Code Analysis Result**\n\n## **Output**\n```\n{output or 'No output generated.'}\n```"
+
+        return {"status": "success" if not errors else "error", "filename": filename, "output": markdown_response}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -375,12 +374,16 @@ def generate_content(request: ContentGenerationRequest):
 @app.post("/image-analysis")
 async def analyze_image(file: UploadFile = File(...)):
     try:
+        # Save the uploaded image temporarily
         contents = await file.read()
         with open("temp_img.png", "wb") as f:
             f.write(contents)
+
+        # Perform OCR to extract text
         result = ocr.ocr("temp_img.png", cls=True)
         extracted_text = " ".join([line[1][0] for block in result for line in block])
-        
+
+        # Generate AI suggestions based on the extracted text
         completion = client.chat.completions.create(
             messages=[{
                 "role": "user",
@@ -388,6 +391,8 @@ async def analyze_image(file: UploadFile = File(...)):
             }],
             model="llama-3.3-70b-versatile"
         )
+
+        # Return the extracted text and AI suggestions
         return {
             "extracted_text": extracted_text,
             "ai_suggestions": completion.choices[0].message.content
@@ -434,12 +439,20 @@ def generate_docs(request: DocumentationRequest):
 
 @app.post("/chat-assistant")
 def chat_assistant(request: ChatRequest):
+    """
+    Chat assistant that provides responses in Markdown-friendly format.
+    """
     try:
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": request.message}],
             model="llama-3.3-70b-versatile"
         )
-        return {"reply": completion.choices[0].message.content}
+
+        # Format the response in Markdown
+        reply = completion.choices[0].message.content or "No response generated."
+        markdown_response = f"# **Response**\n\n{reply}"
+
+        return {"reply": markdown_response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
